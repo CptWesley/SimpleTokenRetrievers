@@ -1,3 +1,4 @@
+using System;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Primitives;
 using Moq;
@@ -17,15 +18,14 @@ namespace SimpleTokenRetrievers.Tests
 
         private readonly TokenRetrieverBuilder builder = new TokenRetrieverBuilder();
         private readonly Mock<HttpRequest> requestMock = new Mock<HttpRequest>();
+        private readonly Mock<IQueryCollection> queryMock = new Mock<IQueryCollection>();
+        private readonly Mock<IHeaderDictionary> headerMock = new Mock<IHeaderDictionary>();
 
         /// <summary>
         /// Initializes a new instance of the <see cref="TokenRetrieverBuilderTests"/> class.
         /// </summary>
         public TokenRetrieverBuilderTests()
         {
-            Mock<IQueryCollection> queryMock = new Mock<IQueryCollection>();
-            Mock<IHeaderDictionary> headerMock = new Mock<IHeaderDictionary>();
-
             requestMock.Setup(x => x.Query).Returns(queryMock.Object);
             requestMock.Setup(x => x.Headers).Returns(headerMock.Object);
 
@@ -118,6 +118,71 @@ namespace SimpleTokenRetrievers.Tests
         public void HeaderEnabled()
         {
             AssertThat(builder.FromAuthenticationHeader().Build()(requestMock.Object)).IsEqualTo(HeaderToken);
+        }
+
+        /// <summary>
+        /// Checks that the function works correctly if the header is not present.
+        /// </summary>
+        [Fact]
+        public void MissingHeader()
+        {
+            StringValues values;
+            headerMock.Setup(x => x.TryGetValue(It.IsAny<string>(), out values))
+                .Callback(new TryGetValueDelegate((string key, out StringValues values) => values = default))
+                .Returns(false);
+            AssertThat(builder.FromAuthenticationHeader().Build()(requestMock.Object)).IsNullOrEmpty();
+        }
+
+        /// <summary>
+        /// Checks that the function works correctly if the query is not present.
+        /// </summary>
+        [Fact]
+        public void MissingQueryString()
+        {
+            StringValues values;
+            queryMock.Setup(x => x.TryGetValue(It.IsAny<string>(), out values))
+                .Callback(new TryGetValueDelegate((string key, out StringValues values) => values = default))
+                .Returns(false);
+            AssertThat(builder.FromQueryString().Build()(requestMock.Object)).IsNullOrEmpty();
+        }
+
+        /// <summary>
+        /// Checks that the function works correctly if the header is present but empty.
+        /// </summary>
+        [Fact]
+        public void ZeroHeaders()
+        {
+            StringValues values;
+            headerMock.Setup(x => x.TryGetValue(It.IsAny<string>(), out values))
+                .Callback(new TryGetValueDelegate((string key, out StringValues values) => values = new StringValues(Array.Empty<string>())))
+                .Returns(true);
+            AssertThat(builder.FromAuthenticationHeader().Build()(requestMock.Object)).IsNullOrEmpty();
+        }
+
+        /// <summary>
+        /// Checks that the function works correctly if the query is present but empty.
+        /// </summary>
+        [Fact]
+        public void ZeroQueries()
+        {
+            StringValues values;
+            queryMock.Setup(x => x.TryGetValue(It.IsAny<string>(), out values))
+                .Callback(new TryGetValueDelegate((string key, out StringValues values) => values = new StringValues(Array.Empty<string>())))
+                .Returns(true);
+            AssertThat(builder.FromQueryString().Build()(requestMock.Object)).IsNullOrEmpty();
+        }
+
+        /// <summary>
+        /// Checks that the function works correctly if the header has the wrong scheme.
+        /// </summary>
+        [Fact]
+        public void WrongHeader()
+        {
+            StringValues values;
+            headerMock.Setup(x => x.TryGetValue(It.IsAny<string>(), out values))
+                .Callback(new TryGetValueDelegate((string key, out StringValues values) => values = "helloscheme def"))
+                .Returns(true);
+            AssertThat(builder.FromAuthenticationHeader().Build()(requestMock.Object)).IsNullOrEmpty();
         }
     }
 }
